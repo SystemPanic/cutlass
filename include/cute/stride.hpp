@@ -286,6 +286,22 @@ namespace detail {
 template <class Major>
 struct CompactLambda;
 
+// Workaround for MSVC's inability to deduce a non-type parameter pack from a dependent template alias, causing error C3545.
+#ifdef _MSC_VER
+template <class Major, class Shape>
+struct CompactSeq;
+
+template <class Shape>
+struct CompactSeq<LayoutLeft, Shape> {
+    using type = tuple_seq<Shape>;
+};
+
+template <class Shape>
+struct CompactSeq<LayoutRight, Shape> {
+    using type = tuple_rseq<Shape>;
+};
+#endif
+
 // @pre is_integral<Current>
 // Return (result, current * product(shape)) to enable recurrence
 template <class Major, class Shape, class Current>
@@ -296,7 +312,11 @@ compact(Shape   const& shape,
 {
   if constexpr (is_tuple<Shape>::value) { // Shape::tuple Current::int
     using Lambda = CompactLambda<Major>;                  // Append or Prepend
+#ifdef _MSC_VER
+    using Seq    = typename CompactSeq<Major, Shape>::type;  // Seq or RSeq
+#else
     using Seq    = typename Lambda::template seq<Shape>;  // Seq or RSeq
+#endif
     return cute::detail::fold(shape, cute::make_tuple(cute::make_tuple(), current), Lambda{}, Seq{});
   } else {                                // Shape::int Current::int
     if constexpr (is_constant<1, Shape>::value) {
@@ -319,9 +339,10 @@ struct CompactLambda<LayoutLeft>
     auto result = detail::compact<LayoutLeft>(si, get<1>(init));
     return cute::make_tuple(append(get<0>(init), get<0>(result)), get<1>(result));  // Append
   }
-
+#ifndef _MSC_VER
   template <class Shape>
   using seq = tuple_seq<Shape>;                                                     // Seq
+#endif
 };
 
 // For GCC8.5 -- Specialization LayoutRight
@@ -334,9 +355,10 @@ struct CompactLambda<LayoutRight>
     auto result = detail::compact<LayoutRight>(si, get<1>(init));
     return cute::make_tuple(prepend(get<0>(init), get<0>(result)), get<1>(result));  // Prepend
   }
-
+#ifndef _MSC_VER
   template <class Shape>
   using seq = tuple_rseq<Shape>;                                                     // RSeq
+#endif
 };
 
 } // end namespace detail
